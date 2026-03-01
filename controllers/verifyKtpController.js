@@ -26,7 +26,7 @@ export async function verifyKtpController(req, res) {
 		const ktpBase64 = req.files.file_ktp[0].buffer.toString("base64");
 		const selfieBase64 = req.files.file_selfie[0].buffer.toString("base64");
 
-		// 1️⃣ FACE MATCHING (QWEN)
+		// ==== FACE COMPARISON ====
 		const facePrompt = `
 Bandingkan dua foto wajah berikut:
 Foto pertama adalah wajah pada KTP.
@@ -95,7 +95,7 @@ Hanya JSON.
 		else if (similarity >= 0.65) livenessScore = 60;
 		else livenessScore = 0;
 
-		// 2️⃣ OCR KTP (QWEN)
+		// ==== OCR KTP ====
 		const ocrPrompt = `
 Ekstrak data berikut dari foto KTP dalam JSON valid:
 {
@@ -153,7 +153,66 @@ Hanya JSON.
 			});
 		}
 
-		// 3️⃣ GEOCODING (NOMINATIM)
+		// ==== IDENTITY SCORE & COMPLIANCE SCORE VIA SERPER + LLM ====
+		let serperResult = null;
+		let identityComplianceResult = null;
+		if (ktpData && ktpData.nama) {
+			try {
+				const serperRes = await fetch("https://google.serper.dev/search", {
+					method: "POST",
+					headers: {
+						"X-API-KEY":
+							process.env.SERPER_API_KEY ||
+							"12bc9ca36fb6bef083e62c898d5d590b895d4c01",
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						q: ktpData.nama,
+						gl: "id",
+						hl: "id",
+					}),
+				});
+				serperResult = await serperRes.json();
+				if (serperResult) {
+					const qwenPrompt = `
+Berdasarkan hasil pencarian Google berikut (dalam format JSON), berikan penilaian identity_score (0-100) dan compliance_score (0-100) untuk nama: ${ktpData.nama}. Jawab hanya JSON dengan format:\n{"identity_score": 0-100, "compliance_score": 0-100, "alasan": "..."}\n\nData Google:\n${JSON.stringify(serperResult).slice(0, 4000)}\n`;
+					const qwenRes = await fetch(
+						"https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+						{
+							method: "POST",
+							headers: {
+								"Content-Type": "application/json",
+								Authorization: `Bearer ${process.env.QWEN_API_KEY}`,
+							},
+							body: JSON.stringify({
+								model: "qwen-vl-plus",
+								messages: [
+									{
+										role: "user",
+										content: [{ type: "text", text: qwenPrompt }],
+									},
+								],
+								temperature: 0,
+							}),
+						},
+					);
+					const qwenData = await qwenRes.json();
+					try {
+						const raw = qwenData.choices[0].message.content
+							.replace(/```json/gi, "")
+							.replace(/```/g, "")
+							.trim();
+						identityComplianceResult = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
+					} catch (err) {
+						identityComplianceResult = null;
+					}
+				}
+			} catch (err) {
+				serperResult = null;
+			}
+		}
+
+		// ==== GEOCODING ====
 		const geoResult = await geocodeWithFallback(ktpData);
 		if (!geoResult) {
 			return res
@@ -164,24 +223,59 @@ Hanya JSON.
 		const ktpLng = geoResult.lng;
 		reason.push(`Geocode menggunakan: ${geoResult.used_address}`);
 
-		// 4️⃣ DISTANCE
 		const distance = calculateDistance(
 			parseFloat(lat),
 			parseFloat(lng),
 			ktpLat,
 			ktpLng,
 		);
-		const maxDistance = 15;
-		identityScore = Math.max(20, 100 - (distance / maxDistance) * 80);
-		reason.push(`Distance: ${distance.toFixed(2)} km`);
+		const maxDistance = 10;
 
-		// 5️⃣ FINAL SCORING
+		// ==== MIX IDENTITY SCORE ====
+		const identityScoreDistance = Math.max(
+			20,
+			100 - (distance / maxDistance) * 80,
+		);
+
+		if (
+			identityComplianceResult &&
+			typeof identityComplianceResult.identity_score === "number"
+		) {
+			const identityScoreLLM = identityComplianceResult.identity_score;
+			identityScore = Math.round(
+				identityScoreLLM * 0.7 + identityScoreDistance * 0.3,
+			);
+			reason.push(
+				`Identity score mix: LLM(${identityScoreLLM}) 70% + Distance(${identityScoreDistance.toFixed(
+					2,
+				)}) 30% = ${identityScore}`,
+			);
+		} else {
+			identityScore = identityScoreDistance;
+			reason.push(`Identity score fallback dari distance: ${identityScore}`);
+		}
+
+		// ==== COMPLIANCE SCORE ====
+		if (
+			identityComplianceResult &&
+			typeof identityComplianceResult.compliance_score === "number"
+		) {
+			complianceScore = identityComplianceResult.compliance_score;
+			reason.push("Compliance score dari Google: " + complianceScore);
+		}
+
+		if (identityComplianceResult && identityComplianceResult.alasan) {
+			reason.push("Alasan: " + identityComplianceResult.alasan);
+		}
+
+		// ==== RISK SCORE & FINAL SCORE ====
 		riskScore = 100 - Math.abs(identityScore - livenessScore) / 2;
 		const finalScore =
 			livenessScore * 0.4 +
 			identityScore * 0.3 +
 			riskScore * 0.2 +
 			complianceScore * 0.1;
+
 		let decision;
 		if (finalScore >= 90) decision = "Auto Approved";
 		else if (finalScore >= 60) decision = "Manual Review";
@@ -196,6 +290,8 @@ Hanya JSON.
 			final_score: Math.round(finalScore),
 			decision,
 			reason,
+			serper_result: serperResult,
+			identity_compliance_result: identityComplianceResult,
 		});
 	} catch (err) {
 		return res.status(500).json({ error: "Server error", detail: err.message });
