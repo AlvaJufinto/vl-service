@@ -2,21 +2,21 @@
 
 # KYC Verification API
 
-API backend untuk verifikasi identitas (KYC) berbasis foto KTP Indonesia, selfie, dan NIK. Menggunakan Qwen Vision LLM untuk OCR & face comparison, Serper API untuk pencarian identitas, serta geocoding untuk validasi lokasi.
+A backend API for identity verification (KYC) based on Indonesian ID card (KTP) photos, selfies, and NIK numbers. It leverages the Qwen Vision LLM for OCR and face comparison, Serper API for identity search, and geocoding for location-based address validation.
 
 ---
 
 ## Tech Stack
 
 - **Node.js** + **Express**
-- **Multer** – upload file/image
-- **Qwen VL Plus** (`qwen-vl-plus`) – Vision Language Model untuk OCR KTP & perbandingan wajah
-- **Serper API** – Google Search untuk validasi identitas
-- **Geocoding** – validasi jarak alamat KTP vs lokasi pengguna
+- **Multer** – file/image upload handling
+- **Qwen VL Plus** (`qwen-vl-plus`) – Vision Language Model for KTP OCR and face comparison
+- **Serper API** – Google Search for identity validation
+- **Geocoding** – validates the distance between the KTP address and the user's current location
 
 ---
 
-## Instalasi
+## Installation
 
 ```bash
 git clone <repo-url>
@@ -24,18 +24,18 @@ cd <project-folder>
 npm install
 ```
 
-Buat file `.env`:
+Create a `.env` file:
 
 ```env
 QWEN_API_KEY=your_qwen_api_key
 SERPER_API_KEY=your_serper_api_key
 ```
 
-Jalankan server:
+Start the server:
 
 ```bash
 npm run dev
-# atau
+# or
 node index.js
 ```
 
@@ -49,13 +49,13 @@ node index.js
 
 ### 1. `POST /kyc/verify-nik`
 
-Verifikasi NIK tanpa file upload.
+Verify a NIK number without file upload.
 
-**Request Body** (`multipart/form-data` atau `application/x-www-form-urlencoded`):
+**Request Body** (`multipart/form-data` or `application/x-www-form-urlencoded`):
 
-| Field | Type   | Keterangan           |
-| ----- | ------ | -------------------- |
-| `nik` | string | Nomor KTP (16 digit) |
+| Field | Type   | Description                |
+| ----- | ------ | -------------------------- |
+| `nik` | string | ID card number (16 digits) |
 
 **Response:**
 
@@ -70,7 +70,7 @@ Verifikasi NIK tanpa file upload.
 
 ### 2. `GET /kyc/all`
 
-Mendapatkan semua data KYC yang tersimpan.
+Retrieve all stored KYC records.
 
 **Response:**
 
@@ -85,7 +85,7 @@ Mendapatkan semua data KYC yang tersimpan.
 
 ### 3. `GET /kyc/verification-results`
 
-Mendapatkan semua hasil verifikasi KYC.
+Retrieve all KYC verification results.
 
 **Response:**
 
@@ -99,13 +99,13 @@ Mendapatkan semua hasil verifikasi KYC.
 
 ### 4. `POST /kyc/extract-ktp`
 
-Ekstrak data dari foto KTP menggunakan AI (OCR).
+Extract data from a KTP photo using AI-powered OCR.
 
 **Request:** `multipart/form-data`
 
-| Field  | Type | Keterangan         |
-| ------ | ---- | ------------------ |
-| `file` | file | Foto KTP (JPG/PNG) |
+| Field  | Type | Description         |
+| ------ | ---- | ------------------- |
+| `file` | file | KTP photo (JPG/PNG) |
 
 **Response:**
 
@@ -138,16 +138,16 @@ Ekstrak data dari foto KTP menggunakan AI (OCR).
 
 ### 5. `POST /kyc/verify-ktp`
 
-Verifikasi lengkap KTP dengan selfie dan lokasi GPS.
+Full KTP verification using a selfie and GPS coordinates.
 
 **Request:** `multipart/form-data`
 
-| Field         | Type   | Keterangan                         |
-| ------------- | ------ | ---------------------------------- |
-| `file_ktp`    | file   | Foto KTP                           |
-| `file_selfie` | file   | Foto selfie pengguna               |
-| `lat`         | string | Latitude lokasi pengguna saat ini  |
-| `lng`         | string | Longitude lokasi pengguna saat ini |
+| Field         | Type   | Description                         |
+| ------------- | ------ | ----------------------------------- |
+| `file_ktp`    | file   | KTP photo                           |
+| `file_selfie` | file   | User selfie photo                   |
+| `lat`         | string | User's current latitude coordinate  |
+| `lng`         | string | User's current longitude coordinate |
 
 **Response:**
 
@@ -170,14 +170,14 @@ Verifikasi lengkap KTP dengan selfie dan lokasi GPS.
   "decision": "Auto Approved",
   "reason": [
     "Face similarity: 0.91",
-    "Geocode menggunakan: JL. CONTOH, BANDUNG",
+    "Geocode using: JL. CONTOH, BANDUNG",
     "Identity score mix: LLM(80) 70% + Distance(95.00) 30% = 84"
   ],
   "serper_result": { ... },
   "identity_compliance_result": {
     "identity_score": 80,
     "compliance_score": 90,
-    "alasan": "Nama ditemukan dengan reputasi baik"
+    "alasan": "Name found with good reputation"
   }
 }
 ```
@@ -190,65 +190,64 @@ Verifikasi lengkap KTP dengan selfie dan lokasi GPS.
 
 | Similarity | Liveness Score |
 | ---------- | -------------- |
-| ≥ 0.85     | 100            |
-| ≥ 0.75     | 80             |
-| ≥ 0.65     | 60             |
+| >= 0.85    | 100            |
+| >= 0.75    | 80             |
+| >= 0.65    | 60             |
 | < 0.65     | 0              |
 
 ### Identity Score
 
-Gabungan dari:
+A weighted combination of:
 
-- **70%** Identity Score dari LLM (berdasarkan pencarian Google via Serper)
-- **30%** Distance Score (semakin dekat lokasi GPS dengan alamat KTP, semakin tinggi)
+- **70%** Identity Score from LLM (based on Google search results via Serper)
+- **30%** Distance Score (the closer the GPS location to the KTP address, the higher the score)
 
-### Final Score & Decision
+### Final Score and Decision
 
 ```
-Final Score = (Liveness × 0.4) + (Identity × 0.3) + (Risk × 0.2) + (Compliance × 0.1)
+Final Score = (Liveness x 0.4) + (Identity x 0.3) + (Risk x 0.2) + (Compliance x 0.1)
 ```
 
 | Final Score | Decision      |
 | ----------- | ------------- |
-| ≥ 90        | Auto Approved |
-| 60 – 89     | Manual Review |
+| >= 90       | Auto Approved |
+| 60 - 89     | Manual Review |
 | < 60        | Auto Rejected |
 
 ---
 
-## Struktur Proyek
+## Project Structure
 
 ```
 ├── controllers/
-│   ├── extractKtpController.js     # OCR KTP via Qwen VL
-│   ├── verifyKtpController.js      # Verifikasi lengkap KTP + selfie
+│   ├── extractKtpController.js     # KTP OCR via Qwen VL
+│   ├── verifyKtpController.js      # Full KTP + selfie verification
 │   └── kycController.js            # NIK verify, get all, get results
 ├── routes/
-│   └── kycRoutes.js                # Definisi semua route /kyc
+│   └── kycRoutes.js                # All /kyc route definitions
 ├── utils/
-│   ├── distance.js                 # Hitung jarak GPS (Haversine)
-│   └── geocode.js                  # Geocoding alamat KTP
+│   ├── distance.js                 # GPS distance calculation (Haversine)
+│   └── geocode.js                  # KTP address geocoding
 ├── .env                            # API Keys
-└── index.js                        # Entry point Express
+└── index.js                        # Express entry point
 ```
 
 ---
 
 ## Error Responses
 
-| Status | Error Message                  | Keterangan                   |
-| ------ | ------------------------------ | ---------------------------- |
-| 400    | `File foto KTP wajib diupload` | File tidak dikirim           |
-| 400    | `lat dan lng wajib diisi`      | Koordinat GPS tidak ada      |
-| 400    | `Alamat tidak ditemukan`       | Geocoding gagal              |
-| 500    | `LLM error`                    | Respons API Qwen bermasalah  |
-| 500    | `Gagal parse JSON dari LLM`    | Output LLM tidak valid JSON  |
-| 500    | `Server error`                 | Error internal tidak terduga |
+| Status | Error Message                  | Description                      |
+| ------ | ------------------------------ | -------------------------------- |
+| 400    | `File foto KTP wajib diupload` | KTP file not provided            |
+| 400    | `lat dan lng wajib diisi`      | GPS coordinates missing          |
+| 400    | `Alamat tidak ditemukan`       | Geocoding failed                 |
+| 500    | `LLM error`                    | Qwen API response issue          |
+| 500    | `Gagal parse JSON dari LLM`    | LLM output is not valid JSON     |
+| 500    | `Server error`                 | Unexpected internal server error |
 
 ---
 
-## Catatan
+## Notes
 
-- Semua foto dikirim sebagai **base64** ke Qwen VL API
-- Geocoding menggunakan fallback bertingkat (kecamatan → kota → provinsi) jika alamat lengkap tidak ditemukan
-- Serper API key sudah tersedia sebagai fallback hardcoded (disarankan ganti dengan env variable di produksi)
+- All images are sent as **base64** to the Qwen VL API.
+- Geocoding uses a tiered fallback strategy (sub-district -> city -> province) if the full address cannot be resolved.
