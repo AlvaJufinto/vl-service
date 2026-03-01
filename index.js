@@ -299,7 +299,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 async function geocodeWithFallback(ktpData) {
-	// Normalisasi nama untuk OSM
 	const normalize = (str) =>
 		str
 			? str
@@ -318,13 +317,13 @@ async function geocodeWithFallback(ktpData) {
 	const state = normalize(ktpData.provinsi);
 	const country = "Indonesia";
 
-	// Coba structured query lengkap dulu
+	// Hierarki fallback:
 	const queries = [
-		{ street, suburb, city, state, country },
+		{ street, suburb, city, state, country }, // full structured → paling presisi
 		{ street, city, state, country },
-		{ city, state, country },
-		{ state, country },
-		{ country },
+		{ city, state, country }, // kota + provinsi
+		{ state, country }, // provinsi
+		{ country }, // country only
 	];
 
 	for (let q of queries) {
@@ -332,11 +331,13 @@ async function geocodeWithFallback(ktpData) {
 			format: "json",
 			addressdetails: "1",
 			limit: "1",
-			...Object.fromEntries(Object.entries(q).filter(([_, v]) => v)),
+			...Object.fromEntries(
+				Object.entries(q).filter(([k, v]) => v && v.length > 0),
+			),
 		});
 
 		const url = `https://nominatim.openstreetmap.org/search?${params.toString()}`;
-		console.log("🚀 geocodeWithFallback URL:", url);
+		console.log("🚀 ~ geocodeWithFallback ~ url:", url);
 
 		try {
 			const res = await fetch(url, {
@@ -349,7 +350,6 @@ async function geocodeWithFallback(ktpData) {
 					lat: parseFloat(data[0].lat),
 					lng: parseFloat(data[0].lon),
 					used_address: Object.values(q).filter(Boolean).join(", "),
-					display_name: data[0].display_name,
 				};
 			}
 		} catch (err) {
@@ -359,6 +359,7 @@ async function geocodeWithFallback(ktpData) {
 
 	return null;
 }
+
 app.post(
 	"/v1/kyc/verify-ktp",
 	upload.fields([
@@ -576,11 +577,8 @@ Indonesia
 				ktpLng,
 			);
 
-			if (distance <= 0.2) identityScore = 100;
-			else if (distance <= 1) identityScore = 80;
-			else if (distance <= 5) identityScore = 50;
-			else identityScore = 0;
-
+			const maxDistance = 15;
+			identityScore = Math.max(20, 100 - (distance / maxDistance) * 80);
 			reason.push(`Distance: ${distance.toFixed(2)} km`);
 
 			// =====================================================
@@ -596,8 +594,8 @@ Indonesia
 				complianceScore * 0.1;
 
 			let decision;
-			if (finalScore >= 85) decision = "Auto Approved";
-			else if (finalScore >= 70) decision = "Manual Review";
+			if (finalScore >= 90) decision = "Auto Approved";
+			else if (finalScore >= 60) decision = "Manual Review";
 			else decision = "Auto Rejected";
 
 			return res.json({
