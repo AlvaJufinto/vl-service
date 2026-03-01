@@ -1,121 +1,254 @@
 <!-- @format -->
 
-# VL-Service API Documentation
+# KYC Verification API
 
-## Overview
-
-VeriLabs-Service is an Express.js API for KYC (Know Your Customer) verification using Supabase as the backend database. It provides endpoints for verifying NIK (Indonesian ID number), extracting KTP data from images, verifying KTP with selfie and geolocation, listing all KYC records, and retrieving verification results.
+API backend untuk verifikasi identitas (KYC) berbasis foto KTP Indonesia, selfie, dan NIK. Menggunakan Qwen Vision LLM untuk OCR & face comparison, Serper API untuk pencarian identitas, serta geocoding untuk validasi lokasi.
 
 ---
 
-## Project Structure (Refactored)
+## Tech Stack
 
-- `index.js` — Main entry point, sets up Express and routes
-- `routes/kyc.js` — All KYC-related API routes
-- `controllers/` — Contains logic for each endpoint:
-  - `kycController.js` (NIK verification, list, results)
-  - `extractKtpController.js` (KTP image extraction)
-  - `verifyKtpController.js` (KTP + selfie + geo verification)
-- `utils/` — Utility functions (Supabase client, distance, geocode)
+- **Node.js** + **Express**
+- **Multer** – upload file/image
+- **Qwen VL Plus** (`qwen-vl-plus`) – Vision Language Model untuk OCR KTP & perbandingan wajah
+- **Serper API** – Google Search untuk validasi identitas
+- **Geocoding** – validasi jarak alamat KTP vs lokasi pengguna
 
 ---
 
-## Environment Variables
+## Instalasi
 
-- `SUPABASE_URL`: Your Supabase project URL
-- `SUPABASE_ANON_KEY`: Your Supabase anon key
-- `QWEN_API_KEY`: API key for Qwen LLM (for image/face/OCR)
-- `PORT`: (Optional) Port for the server (default: 3000)
+```bash
+git clone <repo-url>
+cd <project-folder>
+npm install
+```
+
+Buat file `.env`:
+
+```env
+QWEN_API_KEY=your_qwen_api_key
+SERPER_API_KEY=your_serper_api_key
+```
+
+Jalankan server:
+
+```bash
+npm run dev
+# atau
+node index.js
+```
 
 ---
 
 ## Endpoints
 
-### 1. Verify NIK
-
-- **POST** `/v1/kyc/verify-nik`
-- **Body (form-data):**
-  - `nik` (string, required): NIK to verify
-- **Response:**
-  - Returns KTP data, trust score, decision, and reasons
-  - Possible decisions: `Auto-Approved`, `Manual Review`, `Auto-Rejected`
-- **Errors:**
-  - 400: NIK not provided
-  - 404: NIK not found
-  - 500: Server/Supabase error
-
-### 2. Extract KTP Data from Image
-
-- **POST** `/v1/kyc/extract-ktp`
-- **Body (form-data):**
-  - `file` (image, required): KTP photo
-- **Response:**
-  - Extracted KTP fields as JSON
-- **Errors:**
-  - 400: No file uploaded
-  - 500: LLM/server error
-
-### 3. Verify KTP + Selfie + Geolocation
-
-- **POST** `/v1/kyc/verify-ktp`
-- **Body (form-data):**
-  - `file_ktp` (image, required): KTP photo
-  - `file_selfie` (image, required): Selfie photo
-  - `lat` (string/number, required): Latitude
-  - `lng` (string/number, required): Longitude
-- **Response:**
-  - KTP data, liveness, identity, risk, compliance, final score, decision, reasons
-- **Errors:**
-  - 400: Missing files or coordinates
-  - 500: API/server error
-
-### 4. List All KYC Records
-
-- **GET** `/v1/kyc/all`
-- **Response:**
-  - `total`: Number of records
-  - `data`: Array of KYC records
-- **Errors:**
-  - 500: Server/Supabase error
-
-### 5. Verification Results
-
-- **GET** `/v1/kyc/verification-results`
-- **Query Params:**
-  - `search` (optional): Search by NIK or name
-  - `status` (optional): Filter by status (`Auto Approved`, `Manual Review`, `Rejected`, `all`)
-- **Response:**
-  - `summary`: Object with total, approved, manual, rejected counts
-  - `data`: Array of verification results
-- **Errors:**
-  - 500: Server error
+### Base URL: `/kyc`
 
 ---
 
-## Notes
+### 1. `POST /kyc/verify-nik`
 
-- CORS is enabled for `http://localhost:8080`.
-- Uses `multer` for form-data parsing.
-- Uses Qwen LLM for OCR and face matching.
-- Simulates identity, liveness, risk, and compliance scoring for demo purposes.
-- Project is modularized for maintainability.
+Verifikasi NIK tanpa file upload.
 
----
+**Request Body** (`multipart/form-data` atau `application/x-www-form-urlencoded`):
 
-## Running the Server
+| Field | Type   | Keterangan           |
+| ----- | ------ | -------------------- |
+| `nik` | string | Nomor KTP (16 digit) |
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Set environment variables in a `.env` file.
-3. Start the server:
-   ```bash
-   npm start
-   ```
+**Response:**
+
+```json
+{
+  "message": "...",
+  "data": { ... }
+}
+```
 
 ---
 
-## License
+### 2. `GET /kyc/all`
 
-MIT
+Mendapatkan semua data KYC yang tersimpan.
+
+**Response:**
+
+```json
+[
+  { ... },
+  { ... }
+]
+```
+
+---
+
+### 3. `GET /kyc/verification-results`
+
+Mendapatkan semua hasil verifikasi KYC.
+
+**Response:**
+
+```json
+[
+  { ... }
+]
+```
+
+---
+
+### 4. `POST /kyc/extract-ktp`
+
+Ekstrak data dari foto KTP menggunakan AI (OCR).
+
+**Request:** `multipart/form-data`
+
+| Field  | Type | Keterangan         |
+| ------ | ---- | ------------------ |
+| `file` | file | Foto KTP (JPG/PNG) |
+
+**Response:**
+
+```json
+{
+	"message": "Ekstraksi berhasil",
+	"data": {
+		"nik": "3201xxxxxxxxxxxx",
+		"nama": "JOHN DOE",
+		"tempat_lahir": "BANDUNG",
+		"tanggal_lahir": "01-01-1990",
+		"jenis_kelamin": "LAKI-LAKI",
+		"alamat": "JL. CONTOH NO. 1",
+		"rt": "001",
+		"rw": "002",
+		"kelurahan": "KELURAHAN",
+		"kecamatan": "KECAMATAN",
+		"kota_kabupaten": "KOTA BANDUNG",
+		"provinsi": "JAWA BARAT",
+		"agama": "ISLAM",
+		"status_perkawinan": "BELUM KAWIN",
+		"pekerjaan": "KARYAWAN SWASTA",
+		"kewarganegaraan": "WNI",
+		"masa_berlaku": "SEUMUR HIDUP"
+	}
+}
+```
+
+---
+
+### 5. `POST /kyc/verify-ktp`
+
+Verifikasi lengkap KTP dengan selfie dan lokasi GPS.
+
+**Request:** `multipart/form-data`
+
+| Field         | Type   | Keterangan                         |
+| ------------- | ------ | ---------------------------------- |
+| `file_ktp`    | file   | Foto KTP                           |
+| `file_selfie` | file   | Foto selfie pengguna               |
+| `lat`         | string | Latitude lokasi pengguna saat ini  |
+| `lng`         | string | Longitude lokasi pengguna saat ini |
+
+**Response:**
+
+```json
+{
+  "ktp_data": {
+    "nik": "3201xxxxxxxxxxxx",
+    "nama": "JOHN DOE",
+    "alamat": "JL. CONTOH NO. 1",
+    "kelurahan": "KELURAHAN",
+    "kecamatan": "KECAMATAN",
+    "kota": "KOTA BANDUNG",
+    "provinsi": "JAWA BARAT"
+  },
+  "liveness_score": 100,
+  "identity_score": 85,
+  "risk_score": 93,
+  "compliance_score": 90,
+  "final_score": 93,
+  "decision": "Auto Approved",
+  "reason": [
+    "Face similarity: 0.91",
+    "Geocode menggunakan: JL. CONTOH, BANDUNG",
+    "Identity score mix: LLM(80) 70% + Distance(95.00) 30% = 84"
+  ],
+  "serper_result": { ... },
+  "identity_compliance_result": {
+    "identity_score": 80,
+    "compliance_score": 90,
+    "alasan": "Nama ditemukan dengan reputasi baik"
+  }
+}
+```
+
+---
+
+## Scoring System
+
+### Liveness Score (Face Comparison)
+
+| Similarity | Liveness Score |
+| ---------- | -------------- |
+| ≥ 0.85     | 100            |
+| ≥ 0.75     | 80             |
+| ≥ 0.65     | 60             |
+| < 0.65     | 0              |
+
+### Identity Score
+
+Gabungan dari:
+
+- **70%** Identity Score dari LLM (berdasarkan pencarian Google via Serper)
+- **30%** Distance Score (semakin dekat lokasi GPS dengan alamat KTP, semakin tinggi)
+
+### Final Score & Decision
+
+```
+Final Score = (Liveness × 0.4) + (Identity × 0.3) + (Risk × 0.2) + (Compliance × 0.1)
+```
+
+| Final Score | Decision      |
+| ----------- | ------------- |
+| ≥ 90        | Auto Approved |
+| 60 – 89     | Manual Review |
+| < 60        | Auto Rejected |
+
+---
+
+## Struktur Proyek
+
+```
+├── controllers/
+│   ├── extractKtpController.js     # OCR KTP via Qwen VL
+│   ├── verifyKtpController.js      # Verifikasi lengkap KTP + selfie
+│   └── kycController.js            # NIK verify, get all, get results
+├── routes/
+│   └── kycRoutes.js                # Definisi semua route /kyc
+├── utils/
+│   ├── distance.js                 # Hitung jarak GPS (Haversine)
+│   └── geocode.js                  # Geocoding alamat KTP
+├── .env                            # API Keys
+└── index.js                        # Entry point Express
+```
+
+---
+
+## Error Responses
+
+| Status | Error Message                  | Keterangan                   |
+| ------ | ------------------------------ | ---------------------------- |
+| 400    | `File foto KTP wajib diupload` | File tidak dikirim           |
+| 400    | `lat dan lng wajib diisi`      | Koordinat GPS tidak ada      |
+| 400    | `Alamat tidak ditemukan`       | Geocoding gagal              |
+| 500    | `LLM error`                    | Respons API Qwen bermasalah  |
+| 500    | `Gagal parse JSON dari LLM`    | Output LLM tidak valid JSON  |
+| 500    | `Server error`                 | Error internal tidak terduga |
+
+---
+
+## Catatan
+
+- Semua foto dikirim sebagai **base64** ke Qwen VL API
+- Geocoding menggunakan fallback bertingkat (kecamatan → kota → provinsi) jika alamat lengkap tidak ditemukan
+- Serper API key sudah tersedia sebagai fallback hardcoded (disarankan ganti dengan env variable di produksi)
