@@ -1,4 +1,5 @@
 DROP TABLE kyc_ktp;
+DROP TABLE kyc_verification_results;
 
 -- Tabel identitas KTP
 CREATE TABLE kyc_ktp (
@@ -58,27 +59,55 @@ INSERT INTO kyc_ktp VALUES
 ('1371012909980036','Reza Ananda','Padang','1998-09-29','Laki-laki','Jl. Khatib Sulaiman No. 29','029','029','Ulak Karang','Padang Utara','Padang','Sumatera Barat','Islam','Belum Kawin','Mahasiswa','WNI','2029-09-29'),
 ('1371013010990037','Putri Maharani','Padang','1999-10-30','Perempuan','Jl. Veteran No. 30','030','030','Andalas','Padang Timur','Padang','Sumatera Barat','Islam','Belum Kawin','Penulis','WNI','Seumur Hidup');
 
-create table public.kyc_verification_results (
-    id uuid primary key default gen_random_uuid(),
+DROP TABLE IF EXISTS public.kyc_verification_results;
 
-    nik varchar(20) not null,
-    nama varchar(150) not null,
+CREATE TABLE public.kyc_verification_results (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    identity_score integer not null default 0,
-    security_score integer not null default 0,
-    cdd_score integer not null default 0,
+    -- KTP data
+    nik VARCHAR(20) NOT NULL,
+    nama VARCHAR(150) NOT NULL,
+    tempat_lahir VARCHAR(50),
+    tanggal_lahir DATE,
+    jenis_kelamin VARCHAR(20),
+    alamat TEXT,
+    rt VARCHAR(5),
+    rw VARCHAR(5),
+    kelurahan VARCHAR(50),
+    kecamatan VARCHAR(50),
+    kota_kabupaten VARCHAR(50),
+    provinsi VARCHAR(50),
+    agama VARCHAR(30),
+    status_perkawinan VARCHAR(30),
+    pekerjaan VARCHAR(50),
+    kewarganegaraan VARCHAR(20),
+    masa_berlaku VARCHAR(20),
 
-    final_score integer not null,
-    grade varchar(5) not null,
-    predikat varchar(50) not null,
+    -- Skor verifikasi
+    liveness_score INTEGER,
+    identity_score INTEGER,
+    risk_score INTEGER,
+    compliance_score INTEGER,
+    final_score INTEGER,
 
-    status varchar(30) not null check (
-        status in ('Auto Approved', 'Manual Review', 'Rejected')
+    -- Decision & trend
+    status VARCHAR(30) NOT NULL CHECK (
+        status IN ('Auto Approved', 'Manual Review', 'Rejected')
+    ),
+    grade VARCHAR(5),
+    predikat VARCHAR(50),
+    trend VARCHAR(10) DEFAULT 'stable' CHECK (
+        trend IN ('up','down','stable')
     ),
 
-    trend varchar(10) not null default 'stable' check (
-        trend in ('up', 'down', 'stable')
-    ),
+    -- Penjelasan & alasan
+    reason TEXT[], -- array of text
 
-    created_at timestamp with time zone default now()
+    -- Hasil SERP / pencarian
+    serper_result JSONB, -- menyimpan seluruh object JSON hasil search
+
+    -- Hasil identitas & compliance
+    identity_compliance_result JSONB, -- menyimpan seluruh object JSON
+
+    created_at TIMESTAMPTZ DEFAULT now()
 );
