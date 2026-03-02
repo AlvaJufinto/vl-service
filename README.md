@@ -1,10 +1,20 @@
 <!-- @format -->
 
-# KYC Verification API
+# VeriLabs KYC Verification API
 
 A backend API for identity verification (KYC) based on Indonesian ID card (KTP) photos, selfies, and NIK numbers. It leverages the Qwen Vision LLM for OCR and face comparison, Serper API for identity search, and geocoding for location-based address validation.
 
 ---
+
+# Related Links
+
+- Mobile Flutter Repo: https://github.com/mumtazalwan/VeriLabs.git
+- Mobile APK: https://drive.google.com/drive/folders/1Ea4fuNCE4h4PWaFU8nK4wpRs4pSmT_Wp
+- Frontend Repo: https://github.com/AlvaJufinto/verilabs
+- Frontend Deployment: https://verilabs.vercel.app/
+- Backend Repo: https://github.com/AlvaJufinto/vl-service
+
+--
 
 ## Tech Stack
 
